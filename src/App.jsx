@@ -3,22 +3,37 @@ import Sidebar from "./components/Sidebar"
 import Editor from "./components/Editor"
 import Split from "react-split"
 import { nanoid } from "nanoid"
+import {onSnapshot} from "firebase/firestore"
+import { notesCollection } from "./firebase" 
+
 
 export default function App() {
-    const [notes, setNotes] = React.useState(
-        () => JSON.parse(localStorage.getItem("notes")) || []
-    )
+    const [notes, setNotes] = React.useState([])
     const [currentNoteId, setCurrentNoteId] = React.useState(
-        (notes[0] && notes[0].id) || ""
+        (notes[0]?.id) || ""
     )
 
     const currentNote = 
         notes.find(note => note.id === currentNoteId) 
         || notes[0]
 
+    // connects to the firebase Database 
     React.useEffect(() => {
-        localStorage.setItem("notes", JSON.stringify(notes))
-    }, [notes])
+        //onSnapshot returns function that will cause the notesCollection 
+        //  object to stop listening to the firebase DB
+        const unsubscribe = onSnapshot(notesCollection, (snapShot) => {
+            const notesArr = snapShot.docs.map(entry => ({
+                ...entry.data(),
+                    id: entry.id
+            }))
+            
+            setNotes(notesArr)
+        })
+
+        //disconnects from the DB
+        return unsubscribe
+
+    }, [])
 
     function createNewNote() {
         const newNote = {
