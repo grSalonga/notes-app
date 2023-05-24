@@ -2,16 +2,13 @@ import React from "react"
 import Sidebar from "./components/Sidebar"
 import Editor from "./components/Editor"
 import Split from "react-split"
-import { nanoid } from "nanoid"
-import {onSnapshot} from "firebase/firestore"
-import { notesCollection } from "./firebase" 
+import { onSnapshot, addDoc, doc, deleteDoc, setDoc} from "firebase/firestore"
+import { notesCollection, db } from "./firebase" 
 
 
 export default function App() {
-    const [notes, setNotes] = React.useState([])
-    const [currentNoteId, setCurrentNoteId] = React.useState(
-        (notes[0]?.id) || ""
-    )
+    const [notes, setNotes] = React.useState(() => JSON.parse(localStorage.getItem("notes")) || [])
+    const [currentNoteId, setCurrentNoteId] = React.useState("")
 
     const currentNote = 
         notes.find(note => note.id === currentNoteId) 
@@ -19,50 +16,48 @@ export default function App() {
 
     // connects to the firebase Database 
     React.useEffect(() => {
-        //onSnapshot returns function that will cause the notesCollection 
-        //  object to stop listening to the firebase DB
+        //onSnapshot creates a listener that is always watching the DB
+        //  for changes. Returns a function that will disconnect
         const unsubscribe = onSnapshot(notesCollection, (snapShot) => {
             const notesArr = snapShot.docs.map(entry => ({
                 ...entry.data(),
-                    id: entry.id
+                id: entry.id
             }))
             
             setNotes(notesArr)
         })
-
-        //disconnects from the DB
+        
+        //onSnapshot returns function that will cause the notesCollection 
+        //  object to stop listening/disconnect to the firebase DB
         return unsubscribe
-
     }, [])
 
-    function createNewNote() {
+    React.useEffect(() => {
+        if(!currentNoteId)
+            setCurrentNoteId(notes[0]?.id)
+    }, [notes])
+
+
+
+    //Creates a new note and ands it to fireStore DB
+    async function createNewNote() {
         const newNote = {
-            id: nanoid(),
             body: "# Type your markdown note's title here"
         }
-        setNotes(prevNotes => [newNote, ...prevNotes])
-        setCurrentNoteId(newNote.id)
+        const tempNote = await addDoc(notesCollection, newNote)
+        setCurrentNoteId(tempNote.id)
     }
 
-    function updateNote(text) {
-        setNotes(oldNotes => {
-            const newArray = []
-            for (let i = 0; i < oldNotes.length; i++) {
-                const oldNote = oldNotes[i]
-                if (oldNote.id === currentNoteId) {
-                    // Put the most recently-modified note at the top
-                    newArray.unshift({ ...oldNote, body: text })
-                } else {
-                    newArray.push(oldNote)
-                }
-            }
-            return newArray
-        })
+    //onSnapshot will set notes, this just needs to push changes
+    //gets the current doc and sets it according to the passed text
+    async function updateNote(text) {
+        const tempDoc = doc(db, "notes", currentNoteId)
+        await setDoc(tempDoc, {body: text}, {merge: true})
     }
 
-    function deleteNote(event, noteId) {
-        event.stopPropagation()
-        setNotes(oldNotes => oldNotes.filter(note => note.id !== noteId))
+    async function deleteNote(noteId) {
+        const docRef = doc(db, "notes", noteId)
+        await deleteDoc(docRef)
     }
 
 
@@ -83,14 +78,11 @@ export default function App() {
                             newNote={createNewNote}
                             deleteNote={deleteNote}
                         />
-                        {
-                            currentNoteId &&
-                            notes.length > 0 &&
-                            <Editor
-                                currentNote={currentNote}
-                                updateNote={updateNote}
-                            />
-                        }
+                        <Editor
+                            currentNote={currentNote}
+                            updateNote={updateNote}
+                        />
+                        
                     </Split>
                     :
                     <div className="no-notes">
