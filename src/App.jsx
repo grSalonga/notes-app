@@ -7,14 +7,19 @@ import { notesCollection, db } from "./firebase"
 
 
 export default function App() {
-    const [notes, setNotes] = React.useState(() => JSON.parse(localStorage.getItem("notes")) || [])
+    const [notes, setNotes] = React.useState([])
     const [currentNoteId, setCurrentNoteId] = React.useState("")
+    const [tempNoteTxt, setTempNoteTxt] = React.useState("")
 
-    const currentNote = 
-        notes.find(note => note.id === currentNoteId) 
-        || notes[0]
+    //I uses assign because array.sort() will alter the orignal array
+    const sortedNotes = Object.assign([], notes)
+    sortedNotes.sort((a, b) => b.updatedAt - a.updatedAt)
 
-    // connects to the firebase Database 
+    const currentNote = notes.find(note => note.id === currentNoteId) || notes[0]
+
+    /**
+     * connects to the firebase Database 
+     */
     React.useEffect(() => {
         //onSnapshot creates a listener that is always watching the DB
         //  for changes. Returns a function that will disconnect
@@ -32,34 +37,69 @@ export default function App() {
         return unsubscribe
     }, [])
 
+    /**
+     * sets the currentNoteId
+     */
     React.useEffect(() => {
         if(!currentNoteId)
             setCurrentNoteId(notes[0]?.id)
     }, [notes])
 
+    /**
+     * sets the tempNoteTxt
+     */
+    React.useEffect(() => {
+        if(currentNote)
+            setTempNoteTxt(currentNote.body)
+    }, [currentNote])
 
+    /**
+     * used for debouncing
+     * when the user types, it alters tempNoteTxt causeing this to run
+     * Causes the program to wait for 500ms before pushing the changes to 
+     * firebase. When typing, a character and then another, if the second
+     * is withing 500ms then the change is not pushed since cleartimeout is 
+     * called.
+     * hanges only get pushed when the user stops typing
+     */
+    React.useEffect(() => {
+        const timeOutId = setTimeout(() => {
+            updateNote(tempNoteTxt)
+        }, 500)
 
-    //Creates a new note and ands it to fireStore DB
+        return () => clearTimeout(timeOutId)
+    }, [tempNoteTxt])
+
+    /**
+     * Creates a new note and pushes it to the db
+     */
     async function createNewNote() {
         const newNote = {
-            body: "# Type your markdown note's title here"
+            body: "# Type your markdown note's title here",
+            createdAt: Date.now(),
+            updatedAt: Date.now()
         }
         const tempNote = await addDoc(notesCollection, newNote)
         setCurrentNoteId(tempNote.id)
     }
 
-    //onSnapshot will set notes, this just needs to push changes
-    //gets the current doc and sets it according to the passed text
+    /**
+     * onSnapshot will set notes, this just needs to push changes
+     * gets passed the tempNoteTxt and makes it into a doc
+     */
     async function updateNote(text) {
         const tempDoc = doc(db, "notes", currentNoteId)
-        await setDoc(tempDoc, {body: text}, {merge: true})
+        await setDoc(tempDoc, {
+                body: text,
+                updatedAt: Date.now()
+            }, 
+            {merge: true})
     }
 
     async function deleteNote(noteId) {
         const docRef = doc(db, "notes", noteId)
         await deleteDoc(docRef)
     }
-
 
     return (
         <main>
@@ -72,15 +112,16 @@ export default function App() {
                         className="split"
                     >
                         <Sidebar
-                            notes={notes}
+                            notes={sortedNotes}
                             currentNote={currentNote}
                             setCurrentNoteId={setCurrentNoteId}
                             newNote={createNewNote}
                             deleteNote={deleteNote}
                         />
                         <Editor
-                            currentNote={currentNote}
-                            updateNote={updateNote}
+                            tempNoteTxt={tempNoteTxt}
+                            updateNote={setTempNoteTxt}
+
                         />
                         
                     </Split>
