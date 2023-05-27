@@ -49,7 +49,7 @@ export default function App() {
      * sets the tempNoteTxt
      */
     React.useEffect(() => {
-        if(currentNote)
+        if(currentNote  )
             setTempNoteTxt(currentNote.body)
     }, [currentNote])
 
@@ -88,12 +88,14 @@ export default function App() {
      * gets passed the tempNoteTxt and makes it into a doc
      */
     async function updateNote(text) {
-        const tempDoc = doc(db, "notes", currentNoteId)
-        await setDoc(tempDoc, {
-                body: text,
-                updatedAt: Date.now()
-            }, 
-            {merge: true})
+        if(!(text === currentNote.body)){
+            const tempDoc = doc(db, "notes", currentNoteId)
+            await setDoc(tempDoc, {
+                    body: text,
+                    updatedAt: Date.now()
+                }, 
+                {merge: true})
+        }
     }
 
     async function deleteNote(noteId) {
